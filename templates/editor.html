@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Code Editor — AI Code Review{% endblock %}
+{% block page_title %}Code Editor{% endblock %}
+
+{% block extra_css %}
+<style>
+  .editor-layout { display: grid; grid-template-columns: 1fr 360px; gap: 20px; height: calc(100vh - var(--topbar-height) - 56px); }
+  .editor-panel { display: flex; flex-direction: column; }
+  .results-panel { overflow-y: auto; }
+  #inline-results { display: none; }
+  .ir-score-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .ir-score-item { background: var(--bg-tertiary); border-radius: var(--radius-md); padding: 14px; text-align: center; }
+  .ir-score-value { font-size: 1.75rem; font-weight: 900; }
+  .ir-score-label { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
+
+  @media (max-width: 1100px) {
+    .editor-layout { grid-template-columns: 1fr; height: auto; }
+    #monaco-editor { height: 400px; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="auth-guard" style="display:none;">
+
+<!-- Editor Toolbar -->
+<div class="glass-card-static" style="padding:14px 20px;margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+  <div style="display:flex;align-items:center;gap:8px;">
+    <label style="font-size:0.85rem;font-weight:600;color:var(--text-secondary);">Language:</label>
+    <select id="language-select" class="form-control" style="width:auto;padding:6px 14px;font-size:0.875rem;">
+      <option value="python">🐍 Python</option>
+      <option value="javascript">⚡ JavaScript</option>
+      <option value="java">☕ Java</option>
+      <option value="cpp">⚙️ C++</option>
+    </select>
+  </div>
+  <input type="text" id="code-title" class="form-control" placeholder="Snippet title (optional)" style="width:220px;padding:7px 12px;font-size:0.875rem;">
+  <div style="display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap;">
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.85rem;color:var(--text-secondary);">
+      <input type="checkbox" id="realtime-toggle" style="accent-color:var(--primary);" checked>
+      Real-time
+    </label>
+    <button id="sample-btn" class="btn btn-secondary btn-sm">📋 Sample</button>
+    <button id="copy-btn" class="btn btn-secondary btn-sm">📋 Copy</button>
+    <button id="clear-btn" class="btn btn-secondary btn-sm">🗑 Clear</button>
+    <button id="analyze-btn" class="btn btn-primary">🔍 Analyze Code</button>
+  </div>
+</div>
+
+<div class="editor-layout">
+  <!-- Monaco Editor -->
+  <div class="editor-panel">
+    <div class="editor-wrapper" style="flex:1;">
+      <div class="editor-toolbar">
+        <div style="display:flex;gap:8px;">
+          <div class="window-dot dot-red"></div>
+          <div class="window-dot dot-yellow"></div>
+          <div class="window-dot dot-green"></div>
+        </div>
+        <span style="color:var(--text-muted);font-size:0.8rem;margin-left:8px;font-family:monospace;" id="editor-filename">editor.py</span>
+        <div style="margin-left:auto;display:flex;gap:16px;font-size:0.78rem;color:var(--text-muted);">
+          <span id="line-count">0 lines</span>
+          <span id="char-count">0 chars</span>
+        </div>
+      </div>
+      <div id="monaco-editor"></div>
+    </div>
+  </div>
+
+  <!-- Results Panel -->
+  <div class="results-panel">
+    <!-- Inline Results (Real-time) -->
+    <div id="inline-results" class="glass-card-static" style="padding:0;overflow:hidden;">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+        <h5 style="margin:0;">🤖 Live Analysis</h5>
+        <span style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--success);">
+          <span style="width:8px;height:8px;background:var(--success);border-radius:50%;display:inline-block;animation:pulse 1.5s infinite;"></span>
+          Real-time
+        </span>
+      </div>
+
+      <div style="padding:16px 20px;">
+        <div class="ir-score-grid">
+          <div class="ir-score-item">
+            <div class="ir-score-value" id="ir-score" style="color:var(--success);">–</div>
+            <div class="ir-score-label">Quality Score</div>
+          </div>
+          <div class="ir-score-item">
+            <div class="ir-score-value" id="ir-grade" style="color:var(--primary-light);">–</div>
+            <div class="ir-score-label">Grade</div>
+          </div>
+          <div class="ir-score-item">
+            <div class="ir-score-value" id="ir-issues" style="color:var(--warning);">0</div>
+            <div class="ir-score-label">Issues</div>
+          </div>
+          <div class="ir-score-item">
+            <div class="ir-score-value" id="ir-vulns" style="color:var(--danger);">0</div>
+            <div class="ir-score-label">Vulnerabilities</div>
+          </div>
+        </div>
+
+        <div id="ir-issue-list"></div>
+
+        <div style="margin-top:12px;">
+          <button onclick="analyzeCode()" class="btn btn-primary w-full btn-sm">Full Analysis Report →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tips Card (shown before first analysis) -->
+    <div id="tips-card" class="glass-card-static" style="padding:20px;">
+      <h5 style="margin-bottom:16px;">💡 How to Use</h5>
+      {% for tip in [
+        ('🐍', 'Select language', 'Choose Python, JavaScript, Java, or C++'),
+        ('✍️', 'Write or paste code', 'Type or paste your source code'),
+        ('⚡', 'Real-time analysis', 'Results update as you type (toggle off to save API calls)'),
+        ('🔍', 'Full analysis', 'Click Analyze Code for complete AI review'),
+        ('📄', 'Download report', 'Export findings as PDF or text file'),
+      ] %}
+      <div style="display:flex;gap:10px;margin-bottom:12px;align-items:flex-start;">
+        <span style="font-size:1.2rem;">{{ tip[0] }}</span>
+        <div>
+          <div style="font-weight:600;font-size:0.85rem;">{{ tip[1] }}</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);">{{ tip[2] }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Language Reference -->
+    <div class="glass-card-static" style="padding:20px;margin-top:16px;">
+      <h5 style="margin-bottom:12px;">📌 Detected Issues Legend</h5>
+      {% for severity, color, desc in [('Critical','#f87171','Immediate fix required'),('High','#fb923c','Fix before deploying'),('Medium','#fbbf24','Should be addressed'),('Low','#60a5fa','Minor improvements'),('Info','#9ca3af','Best practices')] %}
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <div style="width:12px;height:12px;border-radius:2px;background:{{ color }};flex-shrink:0;"></div>
+        <span style="font-weight:600;font-size:0.8rem;color:{{ color }};width:60px;">{{ severity }}</span>
+        <span style="font-size:0.8rem;color:var(--text-muted);">{{ desc }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+</div><!-- end auth-guard -->
+{% endblock %}
+
+{% block extra_js %}
+<!-- Monaco Editor Loader -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+<script src="/static/js/editor.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    if (!App.requireAuth()) return;
+    document.getElementById('auth-guard').style.display = 'block';
+
+    // Update filename when language changes
+    document.getElementById('language-select').addEventListener('change', (e) => {
+      const exts = { python: '.py', javascript: '.js', java: '.java', cpp: '.cpp' };
+      document.getElementById('editor-filename').textContent = 'editor' + (exts[e.target.value] || '.py');
+    });
+  });
+</script>
+{% endblock %}

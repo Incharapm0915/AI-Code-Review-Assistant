@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}Profile — AI Code Review{% endblock %}
+{% block page_title %}User Profile{% endblock %}
+
+{% block content %}
+<div id="auth-guard" style="display:none;">
+
+<div class="grid-2" style="align-items:start;">
+  <!-- Profile Card -->
+  <div>
+    <div class="glass-card-static p-8" style="text-align:center;margin-bottom:20px;">
+      <div class="user-avatar" style="width:80px;height:80px;font-size:2rem;margin:0 auto 16px;" data-user-avatar>U</div>
+      <h3 data-user-name>Loading...</h3>
+      <p style="color:var(--text-muted);font-size:0.875rem;" id="profile-email">–</p>
+      <span class="badge badge-info" data-user-role style="margin-top:8px;">Developer</span>
+
+      <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+        <div>
+          <div style="font-size:1.5rem;font-weight:900;" id="p-total-reviews">–</div>
+          <div style="font-size:0.75rem;color:var(--text-muted);">Reviews</div>
+        </div>
+        <div>
+          <div style="font-size:1.5rem;font-weight:900;" id="p-avg-score" style="color:var(--success);">–</div>
+          <div style="font-size:0.75rem;color:var(--text-muted);">Avg Score</div>
+        </div>
+        <div>
+          <div style="font-size:1.5rem;font-weight:900;" id="p-total-vulns">–</div>
+          <div style="font-size:0.75rem;color:var(--text-muted);">Vulns Found</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GitHub Status -->
+    <div class="glass-card-static p-6" style="margin-bottom:16px;">
+      <h5 style="margin-bottom:16px;">🐙 GitHub Integration</h5>
+      <div id="gh-status">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:1.5rem;">🐙</span>
+          <div id="gh-info" style="color:var(--text-muted);font-size:0.875rem;">Not connected</div>
+        </div>
+        <div style="margin-top:12px;">
+          <a href="/github" class="btn btn-secondary w-full">Manage GitHub Integration</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Security -->
+    <div class="glass-card-static p-6">
+      <h5 style="margin-bottom:16px;">🔐 Security</h5>
+      <form id="password-form">
+        <div class="form-group">
+          <label class="form-label">Current Password</label>
+          <input type="password" class="form-control" id="current-pwd" placeholder="Current password">
+        </div>
+        <div class="form-group">
+          <label class="form-label">New Password</label>
+          <input type="password" class="form-control" id="new-pwd" placeholder="New password (min 8 chars)">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Confirm New Password</label>
+          <input type="password" class="form-control" id="confirm-pwd" placeholder="Repeat new password">
+        </div>
+        <button type="submit" class="btn btn-primary w-full">Update Password</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Profile & Settings -->
+  <div>
+    <div class="glass-card-static p-6" style="margin-bottom:20px;">
+      <h4 style="margin-bottom:20px;">✏️ Edit Profile</h4>
+      <form id="profile-form">
+        <div class="form-group">
+          <label class="form-label">Full Name</label>
+          <input type="text" class="form-control" id="edit-fullname" placeholder="Your full name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Username</label>
+          <input type="text" class="form-control" id="edit-username" placeholder="Username" readonly style="opacity:0.6;cursor:not-allowed;">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" class="form-control" id="edit-email" placeholder="Email" readonly style="opacity:0.6;cursor:not-allowed;">
+        </div>
+        <div class="form-group">
+          <label class="form-label">GitHub Username</label>
+          <input type="text" class="form-control" id="edit-github" placeholder="github_username">
+        </div>
+        <button type="submit" class="btn btn-primary">💾 Save Changes</button>
+      </form>
+    </div>
+
+    <!-- API Preferences -->
+    <div class="glass-card-static p-6" style="margin-bottom:20px;">
+      <h5 style="margin-bottom:16px;">⚙️ Preferences</h5>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div>
+          <div style="font-weight:600;font-size:0.875rem;">Dark Mode</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);">Toggle between dark and light theme</div>
+        </div>
+        <button id="theme-toggle-profile" class="theme-toggle" onclick="Theme.toggle()"></button>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div>
+          <div style="font-weight:600;font-size:0.875rem;">Real-time Analysis</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);">Analyze code as you type in editor</div>
+        </div>
+        <input type="checkbox" style="accent-color:var(--primary);" checked>
+      </div>
+    </div>
+
+    <!-- Danger Zone -->
+    <div class="glass-card-static p-6" style="border:1px solid rgba(239,68,68,0.3);">
+      <h5 style="margin-bottom:12px;color:var(--danger);">⚠️ Danger Zone</h5>
+      <p style="font-size:0.875rem;color:var(--text-muted);margin-bottom:16px;">These actions are irreversible. Please proceed with caution.</p>
+      <button class="btn btn-danger btn-sm" onclick="confirmDeleteAccount()">🗑 Delete Account</button>
+    </div>
+  </div>
+</div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', async () => {
+    if (!App.requireAuth()) return;
+    document.getElementById('auth-guard').style.display = 'block';
+
+    // Pre-fill form
+    const user = App.user;
+    if (user) {
+      document.getElementById('edit-fullname').value = user.full_name || '';
+      document.getElementById('edit-username').value = user.username || '';
+      document.getElementById('edit-email').value = user.email || '';
+      document.getElementById('edit-github').value = user.github_username || '';
+      document.getElementById('profile-email').textContent = user.email;
+      if (user.github_username) {
+        document.getElementById('gh-info').innerHTML = `<span style="color:var(--success);">✓ Connected as @${user.github_username}</span>`;
+      }
+    }
+
+    // Load stats
+    try {
+      const res = await API.get('/api/dashboard/stats');
+      const d = res?.data || {};
+      animateCount(document.getElementById('p-total-reviews'), d.total_reviews || 0);
+      document.getElementById('p-avg-score').textContent = Math.round(d.avg_quality_score || 0);
+      animateCount(document.getElementById('p-total-vulns'), d.total_vulnerabilities || 0);
+    } catch(_) {}
+
+    // Theme toggle sync
+    const tt = document.getElementById('theme-toggle-profile');
+    if (tt) tt.className = `theme-toggle ${App.theme === 'light' ? 'light' : ''}`;
+  });
+
+  document.getElementById('profile-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const res = await API.put('/api/auth/update-profile', {
+        full_name: document.getElementById('edit-fullname').value,
+        github_username: document.getElementById('edit-github').value,
+      });
+      if (res?.data?.user) {
+        App.user = res.data.user;
+        localStorage.setItem('user', JSON.stringify(App.user));
+        updateUserUI();
+        Toast.success('Profile updated!');
+      }
+    } catch(err) { Toast.error('Update failed', err.message); }
+  });
+
+  document.getElementById('password-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const current = document.getElementById('current-pwd').value;
+    const newPwd = document.getElementById('new-pwd').value;
+    const confirm = document.getElementById('confirm-pwd').value;
+
+    if (newPwd !== confirm) { Toast.warning('Passwords don\'t match'); return; }
+
+    try {
+      await API.post('/api/auth/change-password', { current_password: current, new_password: newPwd });
+      Toast.success('Password changed!');
+      document.getElementById('password-form').reset();
+    } catch(err) { Toast.error('Failed', err.message); }
+  });
+
+  function confirmDeleteAccount() {
+    if (confirm('Are you sure you want to delete your account? This cannot be undone.')) {
+      Toast.warning('Feature coming soon', 'Contact admin to delete account');
+    }
+  }
+</script>
+{% endblock %}

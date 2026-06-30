@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}Upload Code — AI Code Review{% endblock %}
+{% block page_title %}Upload Source Code{% endblock %}
+
+{% block content %}
+<div id="auth-guard" style="display:none;">
+
+<div class="grid-2" style="margin-bottom:24px;align-items:start;">
+  <!-- Upload Zone -->
+  <div>
+    <div class="glass-card-static p-6">
+      <h4 style="margin-bottom:6px;">📁 Upload Source File</h4>
+      <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:24px;">Drag & drop or click to upload. Supports Python, JavaScript, Java, C++.</p>
+
+      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+        <input type="file" id="file-input" style="display:none;" accept=".py,.js,.ts,.java,.cpp,.c,.h,.hpp,.cc,.txt">
+        <div class="upload-icon">📤</div>
+        <div class="upload-title">Drop your code file here</div>
+        <div class="upload-subtitle">or click to browse • Max 16MB</div>
+        <div style="margin-top:16px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+          {% for lang in ['Python (.py)', 'JavaScript (.js)', 'Java (.java)', 'C++ (.cpp, .c)'] %}
+          <span class="badge badge-info">{{ lang }}</span>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Selected File Preview -->
+      <div id="file-preview" style="display:none;margin-top:16px;background:var(--bg-tertiary);border-radius:var(--radius-md);padding:14px;display:none;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span style="font-size:1.5rem;" id="file-icon">📄</span>
+          <div style="flex:1;">
+            <div style="font-weight:700;" id="file-name">filename.py</div>
+            <div style="font-size:0.8rem;color:var(--text-muted);" id="file-meta">0 KB • Python</div>
+          </div>
+          <button onclick="clearFile()" class="btn btn-secondary btn-sm">✕</button>
+        </div>
+      </div>
+
+      <button id="upload-btn" class="btn btn-primary w-full" style="margin-top:16px;" disabled onclick="uploadFile()">
+        🚀 Upload & Analyze
+      </button>
+    </div>
+
+    <!-- Supported Languages -->
+    <div class="glass-card-static p-6" style="margin-top:16px;">
+      <h5 style="margin-bottom:16px;">🔍 What Gets Analyzed</h5>
+      {% for icon, lang, items in [
+        ('🐍','Python','Syntax, PEP8, Security (bandit), AST analysis, Complexity'),
+        ('⚡','JavaScript','ESLint rules, XSS detection, Best practices, ES6+'),
+        ('☕','Java','FindBugs rules, Security patterns, OOP best practices'),
+        ('⚙️','C++','Buffer overflows, Unsafe functions, Memory issues'),
+      ] %}
+      <div style="display:flex;gap:12px;margin-bottom:14px;align-items:flex-start;">
+        <span style="font-size:1.3rem;">{{ icon }}</span>
+        <div>
+          <div style="font-weight:700;font-size:0.875rem;">{{ lang }}</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);">{{ items }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Upload History -->
+  <div class="glass-card-static" style="overflow:hidden;">
+    <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+      <h4 style="margin:0;">🕒 Upload History</h4>
+      <button onclick="loadHistory()" class="btn btn-secondary btn-sm">↻ Refresh</button>
+    </div>
+    <div id="history-list" style="max-height:600px;overflow-y:auto;">
+      <div style="padding:40px;text-align:center;color:var(--text-muted);">
+        <div class="spinner" style="margin:0 auto 12px;"></div>
+        Loading history...
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Analysis Progress Modal (shown during upload) -->
+<div id="progress-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);z-index:1000;display:none;align-items:center;justify-content:center;">
+  <div class="glass-card-static" style="padding:40px;width:min(90vw,480px);text-align:center;">
+    <div style="font-size:3rem;margin-bottom:16px;">🤖</div>
+    <h3 style="margin-bottom:8px;">Analyzing Your Code</h3>
+    <p style="color:var(--text-muted);margin-bottom:24px;">AI is scanning for bugs, vulnerabilities, and improvements...</p>
+    <div class="progress" style="height:10px;margin-bottom:16px;">
+      <div class="progress-bar" id="progress-bar" style="width:0%;"></div>
+    </div>
+    <p style="font-size:0.875rem;color:var(--text-muted);" id="progress-label">Initializing analysis...</p>
+  </div>
+</div>
+
+</div><!-- end auth-guard -->
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    if (!App.requireAuth()) return;
+    document.getElementById('auth-guard').style.display = 'block';
+    loadHistory();
+    setupDragDrop();
+  });
+
+  let selectedFile = null;
+  const fileIcons = { py: '🐍', js: '⚡', ts: '⚡', java: '☕', cpp: '⚙️', c: '⚙️', h: '⚙️' };
+
+  function setupDragDrop() {
+    const zone = document.getElementById('upload-zone');
+    zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) handleFileSelect(file);
+    });
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      if (e.target.files[0]) handleFileSelect(e.target.files[0]);
+    });
+  }
+
+  function handleFileSelect(file) {
+    selectedFile = file;
+    const ext = file.name.split('.').pop().toLowerCase();
+    const preview = document.getElementById('file-preview');
+    document.getElementById('file-icon').textContent = fileIcons[ext] || '📄';
+    document.getElementById('file-name').textContent = file.name;
+    document.getElementById('file-meta').textContent = `${formatBytes(file.size)} • ${ext.toUpperCase()}`;
+    preview.style.display = 'flex';
+    document.getElementById('upload-btn').disabled = false;
+    Toast.info('File selected', file.name);
+  }
+
+  function clearFile() {
+    selectedFile = null;
+    document.getElementById('file-preview').style.display = 'none';
+    document.getElementById('file-input').value = '';
+    document.getElementById('upload-btn').disabled = true;
+  }
+
+  async function uploadFile() {
+    if (!selectedFile) return;
+
+    const progressModal = document.getElementById('progress-modal');
+    const progressBar = document.getElementById('progress-bar');
+    const progressLabel = document.getElementById('progress-label');
+
+    progressModal.style.display = 'flex';
+    document.getElementById('upload-btn').disabled = true;
+
+    const steps = [
+      [15, 'Uploading file...'],
+      [35, 'Preprocessing code...'],
+      [55, 'Running static analysis...'],
+      [75, 'AI security scan...'],
+      [90, 'Generating report...'],
+    ];
+
+    let stepIdx = 0;
+    const progressInterval = setInterval(() => {
+      if (stepIdx < steps.length) {
+        const [pct, label] = steps[stepIdx++];
+        progressBar.style.width = pct + '%';
+        progressLabel.textContent = label;
+      }
+    }, 600);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      const res = await API.upload('/api/upload', formData);
+
+      clearInterval(progressInterval);
+      progressBar.style.width = '100%';
+      progressLabel.textContent = 'Analysis complete!';
+
+      if (res?.data?.report_id) {
+        setTimeout(() => {
+          progressModal.style.display = 'none';
+          window.location.href = `/results/${res.data.report_id}`;
+        }, 800);
+      }
+    } catch (err) {
+      clearInterval(progressInterval);
+      progressModal.style.display = 'none';
+      Toast.error('Upload failed', err.message);
+      document.getElementById('upload-btn').disabled = false;
+    }
+  }
+
+  async function loadHistory() {
+    const list = document.getElementById('history-list');
+    try {
+      const res = await API.get('/api/upload/history');
+      const uploads = res?.data?.uploads || [];
+
+      if (!uploads.length) {
+        list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted);">📂 No uploads yet. Upload your first file!</div>';
+        return;
+      }
+
+      list.innerHTML = uploads.map(u => `
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;">
+          <span style="font-size:1.3rem;">${fileIcons[u.language] || '📄'}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:0.875rem;truncate;">${u.filename}</div>
+            <div style="font-size:0.78rem;color:var(--text-muted);">${u.language.toUpperCase()} • ${formatDate(u.created_at)}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;">
+            ${u.quality_score ? `<div style="font-weight:800;color:${getScoreColor(u.quality_score)};">${Math.round(u.quality_score)}</div>` : '<div style="color:var(--text-muted);">–</div>'}
+            <div style="font-size:0.75rem;color:var(--text-muted);">${u.issue_count} issues</div>
+          </div>
+          ${u.status === 'completed' ? `<a href="/results/${u.id}" class="btn btn-secondary btn-sm">View →</a>` : `<span class="badge badge-medium">${u.status}</span>`}
+        </div>
+      `).join('');
+    } catch (err) {
+      list.innerHTML = `<div style="padding:20px;color:var(--text-muted);">Failed to load history</div>`;
+    }
+  }
+</script>
+{% endblock %}

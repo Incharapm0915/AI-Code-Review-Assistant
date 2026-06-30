@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block title %}GitHub Integration — AI Code Review{% endblock %}
+{% block page_title %}GitHub Integration{% endblock %}
+
+{% block content %}
+<div id="auth-guard" style="display:none;">
+
+<!-- Connection Status -->
+<div id="connection-status" class="glass-card-static" style="padding:24px;margin-bottom:20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+  <div style="width:48px;height:48px;border-radius:50%;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;font-size:1.5rem;">🐙</div>
+  <div style="flex:1;">
+    <h4 style="margin:0 0 4px;">GitHub Connection</h4>
+    <p id="gh-status-text" style="color:var(--text-muted);font-size:0.875rem;margin:0;">Not connected</p>
+  </div>
+  <div id="gh-actions">
+    <button class="btn btn-primary" onclick="document.getElementById('connect-modal').style.display='flex'">🔗 Connect GitHub</button>
+  </div>
+</div>
+
+<div class="grid-2">
+  <!-- Repository List -->
+  <div class="glass-card-static" style="overflow:hidden;">
+    <div style="padding:20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+      <h4 style="margin:0;">📂 Repositories</h4>
+      <button id="refresh-repos" class="btn btn-secondary btn-sm" onclick="loadRepos()">↻ Refresh</button>
+    </div>
+    <div id="repos-list" style="max-height:500px;overflow-y:auto;">
+      <div style="padding:40px;text-align:center;color:var(--text-muted);">Connect GitHub to see your repositories</div>
+    </div>
+  </div>
+
+  <!-- Analyze Panel -->
+  <div>
+    <div class="glass-card-static p-6" id="analyze-panel">
+      <h4 style="margin-bottom:20px;">🔍 Analyze Repository File</h4>
+      <div class="form-group">
+        <label class="form-label">Repository (owner/repo)</label>
+        <input type="text" class="form-control" id="repo-input" placeholder="username/repository-name">
+      </div>
+      <div class="form-group">
+        <label class="form-label">File Path</label>
+        <input type="text" class="form-control" id="filepath-input" placeholder="src/main.py">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Branch</label>
+        <input type="text" class="form-control" id="branch-input" placeholder="main" value="main">
+      </div>
+      <button class="btn btn-primary w-full" onclick="analyzeGithubFile()">🤖 Analyze File</button>
+    </div>
+
+    <!-- Connected Repos -->
+    <div class="glass-card-static" style="margin-top:16px;overflow:hidden;">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border);">
+        <h5 style="margin:0;">⭐ Connected Repositories</h5>
+      </div>
+      <div id="connected-repos" style="padding:16px;">
+        <div style="color:var(--text-muted);font-size:0.875rem;text-align:center;padding:20px;">No repositories connected yet</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Connect Modal -->
+<div id="connect-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);z-index:1000;align-items:center;justify-content:center;">
+  <div class="glass-card-static" style="padding:32px;width:min(90vw,480px);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h3>🔑 Connect GitHub</h3>
+      <span onclick="document.getElementById('connect-modal').style.display='none'" style="cursor:pointer;font-size:1.5rem;color:var(--text-muted);">×</span>
+    </div>
+    <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:20px;">
+      Create a Personal Access Token at <strong>GitHub → Settings → Developer settings → Personal access tokens</strong> with <code>repo</code> and <code>read:user</code> scopes.
+    </p>
+    <div class="form-group">
+      <label class="form-label">Personal Access Token</label>
+      <input type="password" class="form-control" id="gh-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-primary flex-1" onclick="connectGitHub()">Connect</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('connect-modal').style.display='none'">Cancel</button>
+    </div>
+  </div>
+</div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', async () => {
+    if (!App.requireAuth()) return;
+    document.getElementById('auth-guard').style.display = 'block';
+    await checkGitHubStatus();
+    await loadConnectedRepos();
+  });
+
+  async function checkGitHubStatus() {
+    if (App.user?.github_username) {
+      document.getElementById('gh-status-text').textContent = `Connected as @${App.user.github_username}`;
+      document.getElementById('gh-status-text').style.color = 'var(--success)';
+      document.getElementById('gh-actions').innerHTML = `
+        <button class="btn btn-secondary btn-sm" onclick="loadRepos()">📂 Load Repos</button>
+        <button class="btn btn-danger btn-sm" onclick="disconnectGitHub()">Disconnect</button>
+      `;
+      loadRepos();
+    }
+  }
+
+  async function connectGitHub() {
+    const token = document.getElementById('gh-token').value.trim();
+    if (!token) { Toast.warning('Token required'); return; }
+
+    try {
+      const res = await API.post('/api/github/connect', { token });
+      if (res?.data) {
+        App.user = { ...App.user, ...res.data.github_user, github_username: res.data.github_user?.username };
+        localStorage.setItem('user', JSON.stringify(App.user));
+        document.getElementById('connect-modal').style.display = 'none';
+        Toast.success('GitHub Connected!', `Welcome @${res.data.github_user?.username}`);
+        await checkGitHubStatus();
+        updateUserUI();
+      }
+    } catch (err) {
+      Toast.error('Connection failed', err.message);
+    }
+  }
+
+  async function loadRepos() {
+    const list = document.getElementById('repos-list');
+    list.innerHTML = '<div style="padding:20px;text-align:center;"><div class="spinner" style="margin:auto;"></div></div>';
+
+    try {
+      const res = await API.get('/api/github/repos');
+      const repos = res?.data?.repos || [];
+
+      if (!repos.length) {
+        list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">No repositories found</div>';
+        return;
+      }
+
+      list.innerHTML = repos.map(r => `
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.2s;" onclick="selectRepo('${r.full_name}')">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+            <span style="font-weight:700;font-size:0.875rem;">${r.name}</span>
+            ${r.is_private ? '<span class="badge badge-medium" style="font-size:0.65rem;">Private</span>' : '<span class="badge badge-info" style="font-size:0.65rem;">Public</span>'}
+          </div>
+          <div style="font-size:0.78rem;color:var(--text-muted);">${r.description ? r.description.substring(0,80)+'...' : 'No description'}</div>
+          <div style="display:flex;gap:12px;margin-top:6px;font-size:0.75rem;color:var(--text-muted);">
+            <span>${r.language || 'Unknown'}</span>
+            <span>⭐ ${r.stars}</span>
+            <span>🍴 ${r.forks}</span>
+          </div>
+        </div>
+      `).join('');
+    } catch (err) {
+      list.innerHTML = `<div style="padding:20px;color:var(--danger);">Error: ${err.message}</div>`;
+    }
+  }
+
+  function selectRepo(fullName) {
+    document.getElementById('repo-input').value = fullName;
+    Toast.info('Repository selected', fullName);
+  }
+
+  async function analyzeGithubFile() {
+    const repo = document.getElementById('repo-input').value.trim();
+    const filePath = document.getElementById('filepath-input').value.trim();
+    const branch = document.getElementById('branch-input').value.trim() || 'main';
+
+    if (!repo || !filePath) { Toast.warning('Fill all fields'); return; }
+
+    Loading.show('Fetching and analyzing file...');
+    try {
+      const res = await API.post('/api/github/analyze', { repo, file_path: filePath, branch });
+      Loading.hide();
+      if (res?.data?.report_id) {
+        window.location.href = `/results/${res.data.report_id}`;
+      }
+    } catch (err) {
+      Loading.hide();
+      Toast.error('Analysis failed', err.message);
+    }
+  }
+
+  async function loadConnectedRepos() {
+    try {
+      const res = await API.get('/api/github/connected-repos');
+      const repos = res?.data?.repos || [];
+      const el = document.getElementById('connected-repos');
+      if (!repos.length) return;
+      el.innerHTML = repos.map(r => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+          <span>🐙</span>
+          <div style="flex:1;">
+            <div style="font-size:0.875rem;font-weight:600;">${r.repo_name}</div>
+            <div style="font-size:0.75rem;color:var(--text-muted);">${r.analysis_count} analyses</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="selectRepo('${r.repo_full_name}')">Select</button>
+        </div>
+      `).join('');
+    } catch (_) {}
+  }
+
+  async function disconnectGitHub() {
+    if (!confirm('Disconnect GitHub?')) return;
+    App.user = { ...App.user, github_username: null, github_token: null };
+    localStorage.setItem('user', JSON.stringify(App.user));
+    Toast.info('Disconnected', 'GitHub account disconnected');
+    location.reload();
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,97 @@
+{
+  "version": "1.0.0",
+  "standards": {
+    "python": {
+      "name": "PEP 8 — Python Style Guide",
+      "url": "https://peps.python.org/pep-0008/",
+      "rules": [
+        {"id": "E101", "description": "Indentation contains mixed spaces and tabs", "severity": "error"},
+        {"id": "E111", "description": "Indentation is not a multiple of 4 spaces", "severity": "warning"},
+        {"id": "E201", "description": "Whitespace after '('", "severity": "info"},
+        {"id": "E225", "description": "Missing whitespace around operator", "severity": "warning"},
+        {"id": "E302", "description": "Expected 2 blank lines, found 1", "severity": "info"},
+        {"id": "E501", "description": "Line too long (>79 characters)", "severity": "info"},
+        {"id": "W291", "description": "Trailing whitespace", "severity": "info"},
+        {"id": "W292", "description": "No newline at end of file", "severity": "info"},
+        {"id": "W391", "description": "Blank line at end of file", "severity": "info"},
+        {"id": "N801", "description": "Class names should use CapWords convention", "severity": "warning"},
+        {"id": "N802", "description": "Function name should be lowercase", "severity": "warning"},
+        {"id": "N803", "description": "Argument name should be lowercase", "severity": "info"},
+        {"id": "N806", "description": "Variable in function should be lowercase", "severity": "info"}
+      ],
+      "naming_conventions": {
+        "functions": "snake_case",
+        "variables": "snake_case",
+        "classes": "PascalCase",
+        "constants": "UPPER_SNAKE_CASE",
+        "private": "_leading_underscore"
+      }
+    },
+    "javascript": {
+      "name": "ESLint Recommended + Airbnb",
+      "url": "https://eslint.org/docs/rules/",
+      "rules": [
+        {"id": "no-var", "description": "Disallow use of var", "severity": "warning"},
+        {"id": "prefer-const", "description": "Require const for variables not reassigned", "severity": "warning"},
+        {"id": "eqeqeq", "description": "Require === instead of ==", "severity": "warning"},
+        {"id": "no-eval", "description": "Disallow use of eval()", "severity": "error"},
+        {"id": "no-alert", "description": "Disallow alert, confirm, and prompt", "severity": "warning"},
+        {"id": "no-console", "description": "Disallow console statements", "severity": "warning"},
+        {"id": "semi", "description": "Require semicolons", "severity": "info"},
+        {"id": "quotes", "description": "Require consistent quote style", "severity": "info"},
+        {"id": "camelcase", "description": "Require camelCase naming", "severity": "warning"},
+        {"id": "max-len", "description": "Enforce maximum line length of 100", "severity": "info"}
+      ],
+      "naming_conventions": {
+        "functions": "camelCase",
+        "variables": "camelCase",
+        "classes": "PascalCase",
+        "constants": "UPPER_SNAKE_CASE",
+        "components": "PascalCase"
+      }
+    },
+    "java": {
+      "name": "Google Java Style Guide",
+      "url": "https://google.github.io/styleguide/javaguide.html",
+      "rules": [
+        {"id": "J001", "description": "Class names must use UpperCamelCase", "severity": "error"},
+        {"id": "J002", "description": "Method names must use lowerCamelCase", "severity": "warning"},
+        {"id": "J003", "description": "Constant names must use UPPER_SNAKE_CASE", "severity": "warning"},
+        {"id": "J004", "description": "Indentation must be 2 or 4 spaces", "severity": "info"},
+        {"id": "J005", "description": "Each statement on its own line", "severity": "warning"},
+        {"id": "J006", "description": "Column limit of 100 characters", "severity": "info"},
+        {"id": "J007", "description": "No C-style array declarations", "severity": "info"},
+        {"id": "J008", "description": "Long literals must use L suffix (not l)", "severity": "warning"}
+      ],
+      "naming_conventions": {
+        "classes": "UpperCamelCase",
+        "interfaces": "UpperCamelCase",
+        "methods": "lowerCamelCase",
+        "variables": "lowerCamelCase",
+        "constants": "UPPER_SNAKE_CASE",
+        "packages": "lowercase"
+      }
+    },
+    "cpp": {
+      "name": "Google C++ Style Guide",
+      "url": "https://google.github.io/styleguide/cppguide.html",
+      "rules": [
+        {"id": "C001", "description": "Header files should use .h extension", "severity": "info"},
+        {"id": "C002", "description": "Every .cc file should have an associated .h file", "severity": "info"},
+        {"id": "C003", "description": "Use #pragma once or include guards", "severity": "warning"},
+        {"id": "C004", "description": "Functions should be short and focused", "severity": "info"},
+        {"id": "C005", "description": "Avoid non-const global variables", "severity": "warning"},
+        {"id": "C006", "description": "Use nullptr instead of NULL or 0", "severity": "warning"},
+        {"id": "C007", "description": "Use static_cast instead of C-style casts", "severity": "warning"},
+        {"id": "C008", "description": "Never use using namespace std in headers", "severity": "error"}
+      ],
+      "naming_conventions": {
+        "functions": "PascalCase or snake_case",
+        "variables": "snake_case",
+        "classes": "PascalCase",
+        "constants": "kConstantName",
+        "macros": "UPPER_SNAKE_CASE"
+      }
+    }
+  }
+}

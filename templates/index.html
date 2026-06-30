@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Code Review Assistant — AI-Powered Code Analysis Platform</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/main.css">
+  <style>
+    body { margin: 0; overflow-x: hidden; }
+    nav.landing-nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; padding: 16px 40px;
+      background: rgba(15,23,42,0.85); backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo { display: flex; align-items: center; gap: 12px; font-weight: 800; font-size: 1.1rem; }
+    .nav-logo .logo-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--gradient-primary); display: flex; align-items: center;
+      justify-content: center; font-size: 1.1rem;
+    }
+    .nav-links { display: flex; gap: 32px; margin: 0 auto; }
+    .nav-links a { color: var(--text-secondary); font-weight: 500; font-size: 0.9rem; }
+    .nav-links a:hover { color: var(--text-primary); }
+    .nav-actions { display: flex; gap: 12px; align-items: center; }
+
+    .features-section { padding: 100px 24px; max-width: 1200px; margin: 0 auto; }
+    .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; margin-top: 60px; }
+
+    .stats-banner { background: var(--bg-secondary); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 40px 24px; }
+    .stats-banner-inner { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; text-align: center; }
+    .banner-stat-value { font-size: 2.5rem; font-weight: 900; }
+    .banner-stat-label { font-size: 0.85rem; color: var(--text-muted); }
+
+    .testimonials { padding: 80px 24px; max-width: 1200px; margin: 0 auto; }
+    .testimonials-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-top: 48px; }
+    .testimonial-card { padding: 28px; }
+    .testimonial-stars { color: #fbbf24; font-size: 1.1rem; margin-bottom: 16px; }
+    .testimonial-text { color: var(--text-secondary); font-style: italic; line-height: 1.7; margin-bottom: 20px; }
+    .testimonial-author { display: flex; align-items: center; gap: 12px; }
+    .testimonial-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--gradient-primary); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; }
+
+    .cta-section { text-align: center; padding: 100px 24px; max-width: 700px; margin: 0 auto; }
+    .cta-card { background: var(--gradient-card); border: 1px solid rgba(99,102,241,0.3); border-radius: var(--radius-xl); padding: 60px; }
+
+    footer { background: var(--bg-secondary); border-top: 1px solid var(--border); padding: 40px 24px; text-align: center; color: var(--text-muted); font-size: 0.875rem; }
+
+    /* Code animation */
+    .code-window {
+      background: #0d1117;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.08);
+      overflow: hidden;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+    }
+    .code-window-header {
+      background: rgba(255,255,255,0.04);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .code-window-body { padding: 20px; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; line-height: 1.7; }
+    .code-keyword { color: #ff7b72; }
+    .code-string { color: #a5d6ff; }
+    .code-comment { color: #8b949e; }
+    .code-func { color: #d2a8ff; }
+    .code-num { color: #79c0ff; }
+    .ai-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); color: #f87171; padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; margin-top: 8px; }
+    .ai-badge.warning { background: rgba(245,158,11,0.15); border-color: rgba(245,158,11,0.3); color: #fbbf24; }
+    .ai-badge.ok { background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.3); color: #34d399; }
+    .pulse-dot { width: 8px; height: 8px; border-radius: 50%; animation: pulse 1.5s ease-in-out infinite; }
+    .dot-red { background: #ef4444; }
+    .dot-green { background: #10b981; }
+
+    @media (max-width: 768px) {
+      nav.landing-nav { padding: 12px 20px; }
+      .nav-links { display: none; }
+      .stats-banner-inner { grid-template-columns: 1fr 1fr; }
+      .hero-actions { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="landing-nav">
+  <div class="nav-logo">
+    <div class="logo-icon">🤖</div>
+    <span>AI Code Review</span>
+  </div>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#how-it-works">How It Works</a>
+    <a href="#testimonials">Reviews</a>
+  </div>
+  <div class="nav-actions">
+    <button id="theme-toggle" class="theme-toggle"></button>
+    <a href="/login" class="btn btn-secondary btn-sm">Sign In</a>
+    <a href="/register" class="btn btn-primary btn-sm">Get Started Free</a>
+  </div>
+</nav>
+
+<!-- Hero Section -->
+<section class="hero-section" style="padding-top: 80px;">
+  <div class="hero-bg-grid"></div>
+  <div class="hero-bg-orb orb-1"></div>
+  <div class="hero-bg-orb orb-2"></div>
+  <div class="hero-bg-orb orb-3"></div>
+
+  <div class="hero-content" style="width:100%;padding-top:60px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center;max-width:1200px;margin:0 auto;">
+      <div>
+        <div class="hero-badge">
+          <span class="pulse-dot dot-green"></span>
+          ✨ AI-Powered Code Intelligence
+        </div>
+        <h1 class="hero-title">
+          Review Code <span class="text-gradient">Smarter</span>, Ship Faster
+        </h1>
+        <p class="hero-subtitle">
+          Detect bugs, security vulnerabilities, and performance issues instantly with advanced AI/ML analysis. Get intelligent recommendations and generate detailed reports.
+        </p>
+        <div class="hero-actions">
+          <a href="/register" class="btn btn-primary btn-lg">
+            🚀 Start Free Analysis
+          </a>
+          <a href="/login" class="btn btn-outline btn-lg">
+            Sign In →
+          </a>
+        </div>
+        <div style="display:flex;gap:24px;margin-top:32px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:8px;font-size:0.875rem;color:var(--text-secondary);">
+            <span style="color:var(--success);">✓</span> Python, Java, JS, C++
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:0.875rem;color:var(--text-secondary);">
+            <span style="color:var(--success);">✓</span> GitHub Integration
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:0.875rem;color:var(--text-secondary);">
+            <span style="color:var(--success);">✓</span> Instant PDF Reports
+          </div>
+        </div>
+      </div>
+
+      <!-- Code Window Demo -->
+      <div class="animate-float" style="position:relative;">
+        <div class="code-window">
+          <div class="code-window-header">
+            <div class="window-dot dot-red"></div>
+            <div class="window-dot dot-yellow"></div>
+            <div class="window-dot dot-green"></div>
+            <span style="margin-left:8px;color:#8b949e;font-size:0.8rem;font-family:monospace;">vulnerability_demo.py</span>
+          </div>
+          <div class="code-window-body">
+            <div><span class="code-keyword">import</span> <span class="code-num">hashlib</span>, <span class="code-num">os</span></div>
+            <br>
+            <div><span class="code-keyword">def</span> <span class="code-func">authenticate</span>(user, pwd):</div>
+            <div style="padding-left:20px;"><span class="code-comment"># ⚡ AI detected critical issues:</span></div>
+            <div style="padding-left:20px;background:rgba(220,38,38,0.1);border-left:2px solid #ef4444;padding-right:8px;">
+              hash = hashlib.<span class="code-func">md5</span>(pwd.encode())
+            </div>
+            <div style="padding-left:20px;">
+              <span class="ai-badge">⚠ CWE-327: Weak Cryptography</span>
+            </div>
+            <br>
+            <div style="padding-left:20px;background:rgba(220,38,38,0.1);border-left:2px solid #ef4444;padding-right:8px;">
+              os.<span class="code-func">system</span>(<span class="code-string">"echo "</span> + user)
+            </div>
+            <div style="padding-left:20px;">
+              <span class="ai-badge">🚨 CWE-78: Command Injection</span>
+            </div>
+            <br>
+            <div style="padding-left:20px;"><span class="code-keyword">return</span> hash.hexdigest()</div>
+            <br>
+            <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:12px;display:flex;gap:12px;">
+              <span class="ai-badge">Score: 23/100</span>
+              <span class="ai-badge warning">3 Vulnerabilities</span>
+              <span class="ai-badge ok">✓ Fixed in 2 min</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Floating badges -->
+        <div style="position:absolute;top:-20px;right:-20px;background:var(--bg-secondary);border:1px solid rgba(16,185,129,0.4);border-radius:12px;padding:12px 16px;box-shadow:0 8px 30px rgba(0,0,0,0.4);">
+          <div style="font-size:0.75rem;color:var(--text-muted);">AI Score</div>
+          <div style="font-size:1.5rem;font-weight:900;color:#10b981;">94/100</div>
+          <div style="font-size:0.7rem;color:#10b981;">After fixes ↑</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Stats Banner -->
+<div class="stats-banner">
+  <div class="stats-banner-inner">
+    <div data-animate>
+      <div class="banner-stat-value text-gradient">50K+</div>
+      <div class="banner-stat-label">Code Reviews Done</div>
+    </div>
+    <div data-animate>
+      <div class="banner-stat-value text-gradient">99.2%</div>
+      <div class="banner-stat-label">Detection Accuracy</div>
+    </div>
+    <div data-animate>
+      <div class="banner-stat-value text-gradient">4</div>
+      <div class="banner-stat-label">Languages Supported</div>
+    </div>
+    <div data-animate>
+      <div class="banner-stat-value text-gradient">&lt;2s</div>
+      <div class="banner-stat-label">Analysis Time</div>
+    </div>
+  </div>
+</div>
+
+<!-- Features Section -->
+<section id="features" class="features-section">
+  <div style="text-align:center;max-width:600px;margin:0 auto;">
+    <div class="hero-badge" style="justify-content:center;">⚡ Powered by AI/ML</div>
+    <h2 style="margin:16px 0;">Everything You Need for <span class="text-gradient">Perfect Code</span></h2>
+    <p style="color:var(--text-muted);">Our AI analyzes your code across multiple dimensions to ensure quality, security, and performance.</p>
+  </div>
+
+  <div class="features-grid">
+    {% set features = [
+      ('🔍', 'Static Code Analysis', 'Detect syntax errors, bad practices, duplicate code, and coding standard violations instantly.', 'purple'),
+      ('🛡️', 'Security Vulnerability Scanner', 'Identify SQL injection, XSS, command injection, hardcoded secrets, and 50+ security patterns.', 'red'),
+      ('🧠', 'AI/ML Code Intelligence', 'NLP-powered semantic analysis detects logical errors and complex patterns human reviewers miss.', 'blue'),
+      ('⚡', 'Real-Time Feedback', 'Get instant analysis as you type with highlighted problematic lines and live suggestions.', 'green'),
+      ('📊', 'Analytics & Metrics', 'Track code quality scores, complexity metrics, and developer productivity over time.', 'orange'),
+      ('🐙', 'GitHub Integration', 'Connect repositories, analyze PRs, and get automated review comments on commits.', 'cyan'),
+      ('📄', 'PDF Report Generation', 'Download comprehensive reports with scores, issues, recommendations, and code snippets.', 'purple'),
+      ('👥', 'Multi-Language Support', 'Full support for Python, JavaScript, Java, and C++ with language-specific rules.', 'green'),
+      ('🔐', 'Enterprise Security', 'JWT authentication, encrypted storage, and role-based access control for teams.', 'red'),
+    ] %}
+
+    {% for icon, title, desc, color in features %}
+    <div class="glass-card feature-card" data-animate>
+      <div class="feature-icon stat-icon {{ color }}">{{ icon }}</div>
+      <h4 style="margin-bottom:10px;">{{ title }}</h4>
+      <p style="color:var(--text-muted);font-size:0.875rem;line-height:1.6;">{{ desc }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- How It Works -->
+<section id="how-it-works" style="background:var(--bg-secondary);padding:80px 24px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
+  <div style="max-width:1000px;margin:0 auto;text-align:center;">
+    <h2 style="margin-bottom:16px;">How It <span class="text-gradient">Works</span></h2>
+    <p style="color:var(--text-muted);margin-bottom:60px;">From code submission to actionable insights in seconds</p>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:24px;">
+      {% for num, icon, title, desc in [('1','📤','Submit Code','Upload files or paste code directly in the browser editor'),('2','🔬','AI Analysis','Multi-layer analysis: static, security, semantic, and complexity'),('3','📊','Get Results','Instant scores, highlighted issues, and recommendations'),('4','📄','Download Report','Export detailed PDF report with all findings')] %}
+      <div style="text-align:center;" data-animate>
+        <div style="width:64px;height:64px;border-radius:50%;background:var(--gradient-primary);display:flex;align-items:center;justify-content:center;font-size:1.5rem;margin:0 auto 16px;box-shadow:0 8px 25px rgba(99,102,241,0.4);">{{ icon }}</div>
+        <div style="font-size:0.75rem;font-weight:700;color:var(--primary-light);letter-spacing:0.1em;margin-bottom:8px;">STEP {{ num }}</div>
+        <h5 style="margin-bottom:8px;">{{ title }}</h5>
+        <p style="font-size:0.85rem;color:var(--text-muted);">{{ desc }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<!-- Testimonials -->
+<section id="testimonials" class="testimonials">
+  <div style="text-align:center;margin-bottom:48px;">
+    <h2>Trusted by <span class="text-gradient">Developers</span></h2>
+  </div>
+  <div class="testimonials-grid">
+    {% for text, name, role, initial in [
+      ("This tool caught a SQL injection vulnerability that our team missed during code review. The AI analysis is incredibly accurate and the reports are professional.", "Sarah Chen", "Senior Backend Engineer", "S"),
+      ("The real-time analysis in the code editor is a game changer. I can see issues as I type and fix them immediately. Reduced our bug count by 60%.", "Marcus Johnson", "Full Stack Developer", "M"),
+      ("GitHub integration is seamless. Every PR gets automatically reviewed and the AI suggestions have improved our code quality dramatically.", "Priya Patel", "DevOps Engineer", "P"),
+    ] %}
+    <div class="glass-card testimonial-card" data-animate>
+      <div class="testimonial-stars">★★★★★</div>
+      <p class="testimonial-text">"{{ text }}"</p>
+      <div class="testimonial-author">
+        <div class="testimonial-avatar">{{ initial }}</div>
+        <div>
+          <div style="font-weight:700;font-size:0.9rem;">{{ name }}</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);">{{ role }}</div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- CTA -->
+<div class="cta-section" style="max-width:100%;padding:80px 24px;">
+  <div class="cta-card" style="max-width:700px;margin:0 auto;">
+    <div style="font-size:3rem;margin-bottom:20px;">🚀</div>
+    <h2 style="margin-bottom:16px;">Start Reviewing Code <span class="text-gradient">Smarter</span></h2>
+    <p style="color:var(--text-muted);margin-bottom:32px;">Join thousands of developers who trust AI Code Review for better code quality.</p>
+    <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
+      <a href="/register" class="btn btn-primary btn-lg">Get Started Free →</a>
+      <a href="/login" class="btn btn-outline btn-lg">Sign In</a>
+    </div>
+  </div>
+</div>
+
+<!-- Footer -->
+<footer>
+  <div style="max-width:1200px;margin:0 auto;">
+    <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:16px;">
+      <div class="nav-logo" style="justify-content:center;">
+        <div class="logo-icon" style="width:28px;height:28px;font-size:0.9rem;">🤖</div>
+        <span style="font-weight:700;">AI Code Review Assistant</span>
+      </div>
+    </div>
+    <p>© 2025 AI Code Review Assistant. Built with Flask, Python, TensorFlow & ❤️</p>
+    <div style="display:flex;gap:24px;justify-content:center;margin-top:16px;">
+      <a href="/login" style="color:var(--text-muted);">Login</a>
+      <a href="/register" style="color:var(--text-muted);">Register</a>
+      <a href="/dashboard" style="color:var(--text-muted);">Dashboard</a>
+    </div>
+  </div>
+</footer>
+
+<div id="toast-container"></div>
+<script src="/static/js/main.js"></script>
+<script>
+  // Redirect if authenticated
+  if (App.isAuthenticated()) {
+    document.querySelectorAll('a[href="/register"], a[href="/login"]').forEach(a => {
+      if (a.textContent.includes('Get Started') || a.textContent.includes('Start')) {
+        a.href = '/dashboard';
+        a.textContent = 'Go to Dashboard →';
+      }
+    });
+  }
+</script>
+</body>
+</html>

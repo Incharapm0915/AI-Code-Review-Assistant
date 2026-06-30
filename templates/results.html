@@ -1,0 +1,383 @@
+{% extends "base.html" %}
+{% block title %}Analysis Results — AI Code Review{% endblock %}
+{% block page_title %}Analysis Results{% endblock %}
+
+{% block extra_css %}
+<style>
+  .results-grid { display: grid; grid-template-columns: 320px 1fr; gap: 20px; align-items: start; }
+  .score-card { padding: 28px; text-align: center; }
+  .overall-score { font-size: 4rem; font-weight: 900; line-height: 1; }
+  .grade-badge { font-size: 2rem; font-weight: 900; width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 12px auto; }
+  .category-score { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .category-score label { font-size: 0.8rem; color: var(--text-muted); width: 120px; flex-shrink: 0; }
+  .category-score .score-num { font-weight: 700; width: 40px; text-align: right; flex-shrink: 0; }
+
+  .tabs { display: flex; gap: 4px; background: var(--bg-tertiary); padding: 4px; border-radius: var(--radius-md); margin-bottom: 16px; flex-wrap: wrap; }
+  .tab { padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); transition: var(--transition); }
+  .tab.active { background: var(--bg-secondary); color: var(--text-primary); box-shadow: var(--shadow-sm); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .verdict-excellent { color: #10b981; }
+  .verdict-good { color: #3b82f6; }
+  .verdict-fair { color: #f59e0b; }
+  .verdict-poor { color: #ef4444; }
+
+  @media (max-width: 1100px) {
+    .results-grid { grid-template-columns: 1fr; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="auth-guard" style="display:none;">
+
+<!-- Header Actions -->
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+  <div>
+    <p style="color:var(--text-muted);font-size:0.875rem;" id="report-meta">Loading...</p>
+  </div>
+  <div style="display:flex;gap:10px;">
+    <button onclick="downloadReport('txt')" class="btn btn-secondary btn-sm">📄 Download TXT</button>
+    <button onclick="downloadReport('pdf')" class="btn btn-primary btn-sm">📥 Download PDF</button>
+    <a href="/editor" class="btn btn-secondary btn-sm">← New Analysis</a>
+  </div>
+</div>
+
+<div class="results-grid">
+  <!-- Left: Score Summary -->
+  <div>
+    <!-- Overall Score Card -->
+    <div class="glass-card score-card" id="score-card">
+      <div style="display:flex;align-items:center;gap:6px;justify-content:center;margin-bottom:8px;">
+        <span style="width:8px;height:8px;border-radius:50%;background:var(--success);animation:pulse 1.5s infinite;"></span>
+        <span style="font-size:0.8rem;color:var(--text-muted);">AI Analysis Complete</span>
+      </div>
+      <div class="overall-score" id="overall-score" style="color:var(--success);">–</div>
+      <div style="font-size:0.875rem;color:var(--text-muted);margin:4px 0 8px;">Overall Score</div>
+      <div class="grade-badge" id="grade-badge" style="background:rgba(16,185,129,0.15);">–</div>
+      <div id="verdict-text" style="font-size:1rem;font-weight:700;margin-bottom:20px;">Loading...</div>
+
+      <div style="text-align:left;padding-top:16px;border-top:1px solid var(--border);">
+        <div class="category-score">
+          <label>Security</label>
+          <div class="progress" style="flex:1;"><div class="progress-bar" id="sec-bar" style="width:0%;"></div></div>
+          <span class="score-num" id="sec-score">–</span>
+        </div>
+        <div class="category-score">
+          <label>Code Quality</label>
+          <div class="progress" style="flex:1;"><div class="progress-bar" id="qual-bar" style="width:0%;"></div></div>
+          <span class="score-num" id="qual-score">–</span>
+        </div>
+        <div class="category-score">
+          <label>Complexity</label>
+          <div class="progress" style="flex:1;"><div class="progress-bar" id="comp-bar" style="width:0%;"></div></div>
+          <span class="score-num" id="comp-score">–</span>
+        </div>
+        <div class="category-score">
+          <label>Maintainability</label>
+          <div class="progress" style="flex:1;"><div class="progress-bar" id="maint-bar" style="width:0%;"></div></div>
+          <span class="score-num" id="maint-score">–</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Metrics Card -->
+    <div class="glass-card-static p-6" style="margin-top:16px;" id="metrics-card">
+      <h5 style="margin-bottom:14px;">📊 Code Metrics</h5>
+      <div id="metrics-list" style="font-size:0.85rem;">
+        <div style="text-align:center;padding:20px;color:var(--text-muted);">Loading metrics...</div>
+      </div>
+    </div>
+
+    <!-- Issue Summary -->
+    <div class="glass-card-static p-6" style="margin-top:16px;" id="issue-summary">
+      <h5 style="margin-bottom:14px;">⚠️ Issue Summary</h5>
+      <div id="issue-counts"></div>
+    </div>
+  </div>
+
+  <!-- Right: Tabbed Results -->
+  <div class="glass-card-static" style="padding:20px;">
+    <div class="tabs" id="result-tabs">
+      <div class="tab active" onclick="switchTab('issues')">🐛 Issues <span id="tab-issues-count" class="nav-badge" style="background:var(--warning);">0</span></div>
+      <div class="tab" onclick="switchTab('vulnerabilities')">🛡️ Security <span id="tab-vuln-count" class="nav-badge" style="background:var(--danger);">0</span></div>
+      <div class="tab" onclick="switchTab('optimizations')">⚡ Optimizations</div>
+      <div class="tab" onclick="switchTab('practices')">📋 Best Practices</div>
+    </div>
+
+    <!-- Issues Tab -->
+    <div id="tab-issues" class="tab-content active">
+      <div id="issues-list">
+        <div style="text-align:center;padding:40px;color:var(--text-muted);">
+          <div class="spinner" style="margin:0 auto 12px;"></div>
+          Loading analysis...
+        </div>
+      </div>
+    </div>
+
+    <!-- Vulnerabilities Tab -->
+    <div id="tab-vulnerabilities" class="tab-content">
+      <div id="vulns-list">
+        <div style="text-align:center;padding:40px;color:var(--text-muted);">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Optimizations Tab -->
+    <div id="tab-optimizations" class="tab-content">
+      <div id="opts-list">
+        <div style="text-align:center;padding:40px;color:var(--text-muted);">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Best Practices Tab -->
+    <div id="tab-practices" class="tab-content">
+      <div id="practices-list">
+        <div style="text-align:center;padding:40px;color:var(--text-muted);">Loading...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- end auth-guard -->
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const REPORT_ID = {{ report_id }};
+  let reportData = null;
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    if (!App.requireAuth()) return;
+    document.getElementById('auth-guard').style.display = 'block';
+    await loadReport();
+  });
+
+  async function loadReport() {
+    try {
+      const res = await API.get(`/api/reports/${REPORT_ID}`);
+      if (!res?.data?.report) throw new Error('Report not found');
+      reportData = res.data.report;
+      renderReport(reportData);
+    } catch (err) {
+      Toast.error('Failed to load report', err.message);
+      document.getElementById('report-meta').textContent = 'Error loading report';
+    }
+  }
+
+  function renderReport(r) {
+    const scores = r.scores || {};
+    const summary = r.summary || {};
+
+    // Header meta
+    document.getElementById('report-meta').innerHTML =
+      `Report #${r.id} • ${r.language?.toUpperCase()} • ${r.lines_analyzed} lines • ${formatDateTime(r.created_at)}`;
+
+    // Overall score animation
+    const overallEl = document.getElementById('overall-score');
+    animateCount(overallEl, Math.round(r.quality_score));
+    overallEl.style.color = getScoreColor(r.quality_score);
+
+    // Grade
+    const grade = scores.grade || 'N/A';
+    const gradeEl = document.getElementById('grade-badge');
+    const gradeColors = { A:'#10b981', B:'#3b82f6', C:'#f59e0b', D:'#ef4444', F:'#dc2626' };
+    gradeEl.textContent = grade;
+    gradeEl.style.color = gradeColors[grade] || 'var(--text-primary)';
+    gradeEl.style.background = `${gradeColors[grade] || '#6b7280'}20`;
+
+    // Verdict
+    const verdictEl = document.getElementById('verdict-text');
+    verdictEl.textContent = summary.verdict || 'Analysis Complete';
+    const vClass = { Excellent: 'verdict-excellent', Good: 'verdict-good', Fair: 'verdict-fair', Poor: 'verdict-poor' };
+    verdictEl.className = vClass[summary.verdict] || '';
+
+    // Category bars
+    setTimeout(() => {
+      setBar('sec', scores.security || 0);
+      setBar('qual', scores.quality || 0);
+      setBar('comp', scores.complexity || 0);
+      setBar('maint', scores.maintainability || 0);
+    }, 200);
+
+    // Metrics
+    const metrics = r.metrics || {};
+    const metricsEl = document.getElementById('metrics-list');
+    if (Object.keys(metrics).length) {
+      metricsEl.innerHTML = [
+        ['📏 Total Lines', metrics.total_lines],
+        ['💻 Code Lines', metrics.code_lines],
+        ['💬 Comment Lines', metrics.comment_lines],
+        ['📈 Cyclomatic Complexity', metrics.cyclomatic_complexity],
+        ['🔧 Functions', metrics.function_count],
+        ['🏗️ Classes', metrics.class_count],
+        ['📊 Maintainability Index', metrics.maintainability_index + '%'],
+        ['💬 Comment Ratio', metrics.comment_ratio + '%'],
+      ].map(([k, v]) => `
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:0.82rem;">
+          <span style="color:var(--text-muted);">${k}</span>
+          <span style="font-weight:700;">${v}</span>
+        </div>
+      `).join('');
+    }
+
+    // Issue summary counts
+    const countEl = document.getElementById('issue-counts');
+    const severities = [
+      ['critical', '#f87171', 'Critical'],
+      ['high', '#fb923c', 'High'],
+      ['medium', '#fbbf24', 'Medium'],
+      ['low', '#60a5fa', 'Low'],
+    ];
+    const issues = r.issues || [];
+    countEl.innerHTML = severities.map(([sev, color, label]) => {
+      const cnt = issues.filter(i => i.severity === sev).length;
+      return `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:10px;height:10px;border-radius:2px;background:${color};"></div>
+            <span style="font-size:0.875rem;">${label}</span>
+          </div>
+          <span style="font-weight:800;color:${color};font-size:1.1rem;">${cnt}</span>
+        </div>
+      `;
+    }).join('');
+
+    // Update tab counts
+    document.getElementById('tab-issues-count').textContent = issues.length;
+    document.getElementById('tab-vuln-count').textContent = (r.vulnerabilities_list || r.vulnerabilities || 0);
+
+    // Render tab content
+    renderIssues(r.issues || []);
+    renderVulnerabilities(r.vulnerabilities_list || []);
+    renderOptimizations(r.suggestions_list || []);
+    renderPractices(r.best_practices || []);
+  }
+
+  function setBar(prefix, score) {
+    const bar = document.getElementById(`${prefix}-bar`);
+    const num = document.getElementById(`${prefix}-score`);
+    if (bar) { bar.style.width = score + '%'; bar.style.background = getScoreColor(score); }
+    if (num) { num.textContent = Math.round(score); num.style.color = getScoreColor(score); }
+  }
+
+  function renderIssues(issues) {
+    const el = document.getElementById('issues-list');
+    if (!issues.length) {
+      el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--success);">✅ No issues detected! Your code looks clean.</div>';
+      return;
+    }
+    el.innerHTML = issues.map(issue => `
+      <div class="issue-item">
+        <div class="issue-line-indicator ${issue.severity}"></div>
+        <div class="issue-content">
+          <div class="issue-header">
+            ${createBadge(issue.severity)}
+            <span class="issue-message">${escHtml(issue.message)}</span>
+            <span class="issue-line">Line ${issue.line || '?'}</span>
+          </div>
+          ${issue.code_snippet ? `<div class="issue-snippet">${escHtml(issue.code_snippet.substring(0, 200))}</div>` : ''}
+          <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">${issue.category || ''}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function renderVulnerabilities(vulns) {
+    const el = document.getElementById('vulns-list');
+    if (!vulns.length) {
+      el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--success);">🛡️ No security vulnerabilities found!</div>';
+      return;
+    }
+    el.innerHTML = vulns.map(v => `
+      <div style="padding:16px;border-bottom:1px solid var(--border);border-left:4px solid ${getSevColor(v.severity)};">
+        <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
+          ${createBadge(v.severity)}
+          <span style="font-weight:700;font-size:0.875rem;">${escHtml(v.category)}</span>
+          <span style="margin-left:auto;font-size:0.75rem;background:rgba(99,102,241,0.1);padding:2px 8px;border-radius:4px;color:var(--primary-light);">${v.cve || ''}</span>
+          <span style="font-size:0.78rem;color:var(--text-muted);">Line ${v.line || '?'}</span>
+        </div>
+        <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:8px;">${escHtml(v.description || '')}</p>
+        ${v.code_snippet ? `<div class="issue-snippet" style="margin-bottom:8px;">${escHtml(v.code_snippet.substring(0,200))}</div>` : ''}
+        ${v.recommendation ? `<div style="font-size:0.8rem;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:6px;padding:8px 12px;color:#34d399;">💡 ${escHtml(v.recommendation)}</div>` : ''}
+      </div>
+    `).join('');
+  }
+
+  function renderOptimizations(opts) {
+    const el = document.getElementById('opts-list');
+    if (!opts.length) {
+      el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">✨ No specific optimizations identified.</div>';
+      return;
+    }
+    el.innerHTML = opts.map((o, i) => `
+      <div style="padding:14px;border-bottom:1px solid var(--border);">
+        <div style="display:flex;align-items:flex-start;gap:10px;">
+          <span style="background:var(--bg-tertiary);border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;flex-shrink:0;">${i+1}</span>
+          <div style="flex:1;">
+            <div style="font-weight:600;font-size:0.875rem;margin-bottom:4px;">${escHtml(o.suggestion || '')}</div>
+            ${o.code_snippet ? `<div class="issue-snippet">${escHtml(o.code_snippet.substring(0,150))}</div>` : ''}
+            ${o.example ? `<div style="font-size:0.8rem;background:rgba(99,102,241,0.08);border-radius:6px;padding:6px 10px;margin-top:6px;font-family:monospace;color:var(--primary-light);">✓ ${escHtml(o.example)}</div>` : ''}
+            <div style="margin-top:6px;">${o.impact ? `<span class="badge badge-info">${o.impact}</span>` : ''} ${o.line ? `<span style="font-size:0.75rem;color:var(--text-muted);">Line ${o.line}</span>` : ''}</div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function renderPractices(practices) {
+    const el = document.getElementById('practices-list');
+    if (!practices?.length) {
+      el.innerHTML = '<div style="padding:20px;color:var(--text-muted);">No specific practices identified.</div>';
+      return;
+    }
+    el.innerHTML = `
+      <div style="padding:8px 0;">
+        ${practices.map(p => `
+          <div style="display:flex;gap:10px;padding:10px 4px;border-bottom:1px solid var(--border);">
+            <span style="color:var(--primary-light);flex-shrink:0;">→</span>
+            <span style="font-size:0.875rem;color:var(--text-secondary);">${escHtml(p)}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function switchTab(name) {
+    document.querySelectorAll('.tab').forEach((t, i) => {
+      t.classList.toggle('active', t.textContent.toLowerCase().includes(name));
+    });
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    const tc = document.getElementById(`tab-${name}`);
+    if (tc) tc.classList.add('active');
+  }
+
+  function getSevColor(sev) {
+    const c = { critical:'#dc2626', high:'#ea580c', medium:'#d97706', low:'#3b82f6', info:'#6b7280' };
+    return c[sev] || '#6b7280';
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  async function downloadReport(fmt) {
+    try {
+      const res = await fetch(`/api/reports/${REPORT_ID}/download?format=${fmt}`, {
+        headers: { Authorization: `Bearer ${App.token}` }
+      });
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `review_report_${REPORT_ID}.${fmt}`;
+      a.click();
+      URL.revokeObjectURL(url);
+      Toast.success('Download started!', `Report downloaded as ${fmt.toUpperCase()}`);
+    } catch (err) {
+      Toast.error('Download failed', err.message);
+    }
+  }
+</script>
+{% endblock %}

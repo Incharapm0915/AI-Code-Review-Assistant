@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}Admin Panel — AI Code Review{% endblock %}
+{% block page_title %}Admin Panel{% endblock %}
+
+{% block content %}
+<div id="auth-guard" style="display:none;">
+
+<!-- Admin Stats -->
+<div class="stats-grid" id="admin-stats">
+  {% for id, label, icon, color in [
+    ('total-users','Total Users','👥','purple'),
+    ('active-users','Active Users','✅','green'),
+    ('total-uploads','Total Uploads','📁','blue'),
+    ('total-reports','Total Reports','📊','orange'),
+    ('total-vulns','Vulnerabilities','🛡️','red'),
+    ('total-pastes','Code Pastes','📝','cyan'),
+  ] %}
+  <div class="glass-card stat-card">
+    <div class="stat-icon {{ color }}">{{ icon }}</div>
+    <div class="stat-content">
+      <div class="stat-label">{{ label }}</div>
+      <div class="stat-value" id="{{ id }}">–</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Users Table -->
+<div class="glass-card-static" style="overflow:hidden;margin-top:8px;">
+  <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+    <h4 style="margin:0;">👥 User Management</h4>
+    <div style="display:flex;gap:8px;">
+      <input type="text" class="form-control" placeholder="Search users..." style="width:200px;" id="user-search" oninput="filterUsers()">
+      <button class="btn btn-secondary btn-sm" onclick="loadUsers()">↻ Refresh</button>
+    </div>
+  </div>
+  <div class="table-wrapper" style="border:none;border-radius:0;">
+    <table>
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Role</th>
+          <th>Status</th>
+          <th>Reviews</th>
+          <th>Joined</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="users-table">
+        <tr><td colspan="6" style="text-align:center;padding:32px;"><div class="spinner" style="margin:auto;"></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- System Info -->
+<div class="grid-2" style="margin-top:20px;">
+  <div class="glass-card-static p-6">
+    <h5 style="margin-bottom:16px;">⚙️ System Configuration</h5>
+    <div style="display:grid;gap:10px;font-size:0.875rem;">
+      <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:8px;">
+        <span style="color:var(--text-muted);">AI Engine</span>
+        <span style="font-weight:600;">AI Analyzer v1.0</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:8px;">
+        <span style="color:var(--text-muted);">Languages</span>
+        <span style="font-weight:600;">Python, JS, Java, C++</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:8px;">
+        <span style="color:var(--text-muted);">Database</span>
+        <span style="font-weight:600;color:var(--success);">● Online</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:8px;">
+        <span style="color:var(--text-muted);">Static Analysis</span>
+        <span style="font-weight:600;color:var(--success);">● Active</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;">
+        <span style="color:var(--text-muted);">Security Scanner</span>
+        <span style="font-weight:600;color:var(--success);">● Active</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="glass-card-static p-6">
+    <h5 style="margin-bottom:16px;">🔒 Security Settings</h5>
+    <div style="display:grid;gap:12px;">
+      {% for setting, val, active in [
+        ('JWT Authentication', 'Enabled', True),
+        ('Password Hashing', 'bcrypt (12 rounds)', True),
+        ('SQL Injection Protection', 'SQLAlchemy ORM', True),
+        ('XSS Protection', 'Jinja2 Auto-escape', True),
+        ('CORS Policy', 'Configured', True),
+        ('Rate Limiting', 'Not configured', False),
+      ] %}
+      <div style="display:flex;align-items:center;justify-content:space-between;font-size:0.85rem;">
+        <span style="color:var(--text-muted);">{{ setting }}</span>
+        <span style="color:{{ 'var(--success)' if active else 'var(--warning)' }};font-weight:600;">
+          {{ '✓' if active else '⚠' }} {{ val }}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  let allUsers = [];
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    if (!App.requireAuth()) return;
+    if (!App.isAdmin()) {
+      Toast.error('Access Denied', 'Admin privileges required');
+      setTimeout(() => window.location.href = '/dashboard', 1500);
+      return;
+    }
+    document.getElementById('auth-guard').style.display = 'block';
+    await Promise.all([loadStats(), loadUsers()]);
+  });
+
+  async function loadStats() {
+    try {
+      const res = await API.get('/api/admin/stats');
+      const d = res?.data || {};
+      animateCount(document.getElementById('total-users'), d.total_users || 0);
+      animateCount(document.getElementById('active-users'), d.active_users || 0);
+      animateCount(document.getElementById('total-uploads'), d.total_uploads || 0);
+      animateCount(document.getElementById('total-reports'), d.total_reports || 0);
+      animateCount(document.getElementById('total-vulns'), d.total_vulnerabilities || 0);
+      animateCount(document.getElementById('total-pastes'), d.total_pastes || 0);
+    } catch (err) {
+      Toast.error('Failed to load stats', err.message);
+    }
+  }
+
+  async function loadUsers() {
+    const tbody = document.getElementById('users-table');
+    try {
+      const res = await API.get('/api/admin/users');
+      allUsers = res?.data?.users || [];
+      renderUsers(allUsers);
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--danger);">Failed to load users</td></tr>`;
+    }
+  }
+
+  function renderUsers(users) {
+    const tbody = document.getElementById('users-table');
+    if (!users.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">No users found</td></tr>';
+      return;
+    }
+    tbody.innerHTML = users.map(u => `
+      <tr>
+        <td>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div class="user-avatar" style="width:32px;height:32px;font-size:0.85rem;">${u.full_name?.charAt(0) || u.username?.charAt(0) || 'U'}</div>
+            <div>
+              <div style="font-weight:600;font-size:0.875rem;">${u.full_name || u.username}</div>
+              <div style="font-size:0.75rem;color:var(--text-muted);">${u.email}</div>
+            </div>
+          </div>
+        </td>
+        <td>
+          <span class="badge ${u.role === 'admin' ? 'badge-critical' : 'badge-info'}">${u.role}</span>
+        </td>
+        <td>
+          <span class="badge ${u.is_active ? 'badge-success' : 'badge-medium'}">${u.is_active ? 'Active' : 'Inactive'}</span>
+        </td>
+        <td style="font-weight:600;">${u.id}</td>
+        <td style="font-size:0.8rem;color:var(--text-muted);">${formatDate(u.created_at)}</td>
+        <td>
+          <button class="btn btn-secondary btn-sm" onclick="toggleUser(${u.id}, ${u.is_active})">
+            ${u.is_active ? 'Deactivate' : 'Activate'}
+          </button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  function filterUsers() {
+    const q = document.getElementById('user-search').value.toLowerCase();
+    renderUsers(allUsers.filter(u =>
+      u.username?.toLowerCase().includes(q) ||
+      u.email?.toLowerCase().includes(q) ||
+      u.full_name?.toLowerCase().includes(q)
+    ));
+  }
+
+  async function toggleUser(uid, isActive) {
+    if (!confirm(`${isActive ? 'Deactivate' : 'Activate'} this user?`)) return;
+    try {
+      await API.post(`/api/admin/users/${uid}/toggle`);
+      Toast.success('User updated');
+      loadUsers();
+    } catch (err) {
+      Toast.error('Failed', err.message);
+    }
+  }
+</script>
+{% endblock %}
