@@ -46,7 +46,9 @@ class DevelopmentConfig(Config):
 class ProductionConfig(Config):
     DEBUG = False
     TESTING = False
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', Config.SQLALCHEMY_DATABASE_URI)
+    _db_url = os.environ.get('DATABASE_URL', Config.SQLALCHEMY_DATABASE_URI)
+    # Vercel Postgres provides postgres:// but SQLAlchemy requires postgresql://
+    SQLALCHEMY_DATABASE_URI = _db_url.replace('postgres://', 'postgresql://', 1) if _db_url else Config.SQLALCHEMY_DATABASE_URI
 
 
 class TestingConfig(Config):
