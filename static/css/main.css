@@ -705,6 +705,30 @@ tbody tr:hover td { background: rgba(99, 102, 241, 0.04); }
   border-left: 2px solid var(--border-strong);
 }
 
+/* ── In-editor live finding markers (Monaco decorations) ────────────── */
+.monaco-editor .issue-line-critical { background: rgba(239, 68, 68, 0.14); }
+.monaco-editor .issue-line-high { background: rgba(234, 88, 12, 0.14); }
+.monaco-editor .issue-line-medium { background: rgba(245, 158, 11, 0.12); }
+.monaco-editor .issue-line-low { background: rgba(59, 130, 246, 0.10); }
+.monaco-editor .issue-line-info { background: rgba(148, 163, 184, 0.10); }
+
+.monaco-editor .glyph-critical,
+.monaco-editor .glyph-high,
+.monaco-editor .glyph-medium,
+.monaco-editor .glyph-low,
+.monaco-editor .glyph-info {
+  width: 9px !important;
+  height: 9px !important;
+  margin-left: 7px;
+  margin-top: 7px;
+  border-radius: 50%;
+}
+.monaco-editor .glyph-critical { background: var(--danger); box-shadow: 0 0 4px var(--danger); }
+.monaco-editor .glyph-high { background: #ea580c; box-shadow: 0 0 4px #ea580c; }
+.monaco-editor .glyph-medium { background: var(--warning); }
+.monaco-editor .glyph-low { background: var(--info); }
+.monaco-editor .glyph-info { background: var(--text-muted); }
+
 /* ── Theme Toggle ────────────────────────────────────────────────── */
 .theme-toggle {
   width: 44px;

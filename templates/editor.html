@@ -13,6 +13,18 @@
   .ir-score-value { font-size: 1.75rem; font-weight: 900; }
   .ir-score-label { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
 
+  #run-output-panel { display: none; flex-shrink: 0; max-height: 280px; flex-direction: column;
+    border-top: 1px solid var(--border); background: var(--bg-secondary); }
+  #run-output-panel.open { display: flex; }
+  .run-output-header { display: flex; align-items: center; gap: 10px; padding: 8px 16px;
+    border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .run-output-body { overflow-y: auto; padding: 12px 16px; font-family: var(--font-mono); font-size: 0.82rem; }
+  .run-output-block { white-space: pre-wrap; word-break: break-word; margin-bottom: 10px; line-height: 1.5; }
+  .run-output-stdout { color: var(--text-primary); }
+  .run-output-stderr { color: var(--danger); }
+  .run-stdin-row { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-top: 1px solid var(--border); }
+  .run-stdin-row textarea { flex: 1; resize: vertical; min-height: 32px; max-height: 80px; font-family: var(--font-mono); font-size: 0.78rem; }
+
   @media (max-width: 1100px) {
     .editor-layout { grid-template-columns: 1fr; height: auto; }
     #monaco-editor { height: 400px; }
@@ -43,6 +55,7 @@
     <button id="sample-btn" class="btn btn-secondary btn-sm">📋 Sample</button>
     <button id="copy-btn" class="btn btn-secondary btn-sm">📋 Copy</button>
     <button id="clear-btn" class="btn btn-secondary btn-sm">🗑 Clear</button>
+    <button id="run-btn" class="btn btn-secondary">▶ Run</button>
     <button id="analyze-btn" class="btn btn-primary">🔍 Analyze Code</button>
   </div>
 </div>
@@ -65,6 +78,21 @@
       </div>
       <div id="monaco-editor"></div>
     </div>
+
+    <!-- Run Output -->
+    <div id="run-output-panel">
+      <div class="run-output-header">
+        <strong style="font-size:0.85rem;">▶ Output</strong>
+        <span id="run-status-text" style="font-size:0.78rem;color:var(--text-muted);"></span>
+        <button id="run-stdin-toggle" class="btn btn-secondary btn-sm" style="margin-left:auto;padding:3px 10px;font-size:0.75rem;">+ stdin</button>
+        <button id="run-output-close" class="btn btn-secondary btn-sm" style="padding:3px 10px;font-size:0.75rem;">✕</button>
+      </div>
+      <div class="run-stdin-row" id="run-stdin-row" style="display:none;">
+        <label style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">stdin:</label>
+        <textarea id="run-stdin" class="form-control" placeholder="Input fed to the program, if it reads any (e.g. input() / Scanner / cin)"></textarea>
+      </div>
+      <div class="run-output-body" id="run-output-body"></div>
+    </div>
   </div>
 
   <!-- Results Panel -->
@@ -73,9 +101,9 @@
     <div id="inline-results" class="glass-card-static" style="padding:0;overflow:hidden;">
       <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
         <h5 style="margin:0;">🤖 Live Analysis</h5>
-        <span style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--success);">
+        <span style="display:flex;align-items:center;gap:6px;font-size:0.8rem;">
           <span style="width:8px;height:8px;background:var(--success);border-radius:50%;display:inline-block;animation:pulse 1.5s infinite;"></span>
-          Real-time
+          <span id="ir-status-text" style="color:var(--text-muted);">Waiting for code…</span>
         </span>
       </div>
 
@@ -99,7 +127,7 @@
           </div>
         </div>
 
-        <div id="ir-issue-list"></div>
+        <div id="ir-issue-list" style="max-height:340px;overflow-y:auto;"></div>
 
         <div style="margin-top:12px;">
           <button onclick="analyzeCode()" class="btn btn-primary w-full btn-sm">Full Analysis Report →</button>
@@ -114,6 +142,7 @@
         ('🐍', 'Select language', 'Choose Python, JavaScript, Java, or C++'),
         ('✍️', 'Write or paste code', 'Type or paste your source code'),
         ('⚡', 'Real-time analysis', 'Results update as you type (toggle off to save API calls)'),
+        ('▶️', 'Run your code', 'Click Run to actually execute it and see real output/errors below the editor'),
         ('🔍', 'Full analysis', 'Click Analyze Code for complete AI review'),
         ('📄', 'Download report', 'Export findings as PDF or text file'),
       ] %}

@@ -8,6 +8,7 @@ from backend.models import User, UploadedFile, PastedCode, ReviewReport, Vulnera
 from backend.services.ai_service import AIAnalyzer
 from backend.services.report_generator import ReportGenerator
 from backend.services.github_service import GitHubService
+from backend.services.code_runner import CodeRunner
 from backend.utils.helpers import generate_unique_filename, error_response, success_response
 from backend.utils.validators import validate_code_input
 from backend.utils.code_preprocessor import detect_language, sanitize_code, validate_file_extension
@@ -15,6 +16,7 @@ from backend.utils.code_preprocessor import detect_language, sanitize_code, vali
 api_bp = Blueprint('api', __name__)
 ai_analyzer = AIAnalyzer()
 report_gen = ReportGenerator()
+code_runner = CodeRunner()
 
 
 # ── Dashboard ──────────────────────────────────────────────────────────────────
@@ -216,6 +218,30 @@ def paste_history():
         'pages': pastes.pages,
         'current_page': page
     })
+
+
+# ── Code Execution ────────────────────────────────────────────────────────────
+
+@api_bp.route('/api/execute', methods=['POST'])
+@jwt_required()
+def execute_code():
+    data = request.get_json() or {}
+    code = (data.get('code') or '').strip()
+    language = (data.get('language') or 'python').lower()
+    stdin_data = data.get('stdin') or ''
+
+    valid, msg = validate_code_input(code, language)
+    if not valid:
+        return error_response(msg, 'INVALID_INPUT', 400)
+
+    code = sanitize_code(code)
+    stdin_data = stdin_data[:20000]
+
+    result = code_runner.run(code, language, stdin_data)
+    if not result.get('success'):
+        return error_response(result.get('error', 'Execution is unavailable'), 'EXECUTION_UNAVAILABLE', 422)
+
+    return success_response(data=result)
 
 
 # ── Reports ────────────────────────────────────────────────────────────────────

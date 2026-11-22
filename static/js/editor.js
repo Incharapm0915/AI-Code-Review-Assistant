@@ -2,7 +2,9 @@
 
 let monacoEditor = null;
 let analysisTimeout = null;
-const DEBOUNCE_MS = 1500;
+let currentDecorationIds = [];
+let analysisRequestId = 0;
+const DEBOUNCE_MS = 1000;
 
 function initMonaco() {
   require.config({
@@ -46,6 +48,14 @@ function initMonaco() {
       clearTimeout(analysisTimeout);
       updateLineCount();
       if (document.getElementById('realtime-toggle')?.checked) {
+        const code = monacoEditor.getValue();
+        if (!code.trim()) {
+          clearMarkers();
+          setLiveStatus('Waiting for code…', 'muted');
+          document.getElementById('inline-results').style.display = 'none';
+          return;
+        }
+        setLiveStatus('Typing…', 'muted');
         analysisTimeout = setTimeout(() => analyzeCode(true), DEBOUNCE_MS);
       }
     });
@@ -203,13 +213,23 @@ async function analyzeCode(isRealtime = false) {
     return;
   }
 
-  if (!isRealtime) Loading.show('Running AI analysis...');
+  let myRequestId;
+  if (!isRealtime) {
+    Loading.show('Running AI analysis...');
+  } else {
+    // Tag this request so a slower, now-outdated response can never overwrite
+    // the result of a newer one that finished first (was the cause of stale/
+    // "incorrect" live results when typing fast).
+    myRequestId = ++analysisRequestId;
+    setLiveStatus('Analyzing…', 'muted');
+  }
 
   const analyzeBtn = document.getElementById('analyze-btn');
-  if (analyzeBtn) { analyzeBtn.disabled = true; analyzeBtn.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px;"></div> Analyzing...'; }
+  if (!isRealtime && analyzeBtn) { analyzeBtn.disabled = true; analyzeBtn.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px;"></div> Analyzing...'; }
 
   try {
     const res = await API.post('/api/analyze', { code, language, title });
+    if (isRealtime && myRequestId !== analysisRequestId) return; // a newer request already superseded this one
 
     if (res?.data?.report) {
       if (!isRealtime) {
@@ -220,12 +240,41 @@ async function analyzeCode(isRealtime = false) {
       }
     }
   } catch (err) {
+    if (isRealtime && myRequestId !== analysisRequestId) return;
     Loading.hide();
-    Toast.error('Analysis failed', err.message);
+    if (isRealtime) {
+      setLiveStatus('Analysis failed', 'danger');
+    } else {
+      Toast.error('Analysis failed', err.message);
+    }
   } finally {
-    if (analyzeBtn) { analyzeBtn.disabled = false; analyzeBtn.innerHTML = '🔍 Analyze Code'; }
-    if (!isRealtime) Loading.hide();
+    if (!isRealtime) {
+      if (analyzeBtn) { analyzeBtn.disabled = false; analyzeBtn.innerHTML = '🔍 Analyze Code'; }
+      Loading.hide();
+    }
   }
+}
+
+// Merge style/bug issues and security vulnerabilities into one line-anchored list
+function combineFindings(report) {
+  const issues = (report.issues || []).map(i => ({
+    line: i.line || 1,
+    severity: i.severity || 'info',
+    title: i.message,
+    detail: i.code_snippet || '',
+    kind: 'issue'
+  }));
+  const vulns = (report.vulnerabilities_list || report.vulnerabilities_data || []).map(v => ({
+    line: v.line || 1,
+    severity: v.severity || 'medium',
+    title: `${v.category}: ${v.description}`,
+    detail: v.recommendation || '',
+    kind: 'vulnerability'
+  }));
+  const order = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+  return [...vulns, ...issues].sort((a, b) =>
+    (order[a.severity] ?? 5) - (order[b.severity] ?? 5) || a.line - b.line
+  );
 }
 
 function renderInlineResults(report) {
@@ -234,62 +283,110 @@ function renderInlineResults(report) {
 
   panel.style.display = 'block';
 
-  const issues = report.issues || [];
-  const critical = issues.filter(i => i.severity === 'critical').length;
-  const high = issues.filter(i => i.severity === 'high').length;
-
   document.getElementById('ir-score').textContent = Math.round(report.quality_score);
   document.getElementById('ir-issues').textContent = report.total_issues;
   document.getElementById('ir-vulns').textContent = report.vulnerabilities;
   document.getElementById('ir-grade').textContent = report.scores?.grade || 'N/A';
 
-  // Highlight problematic lines in editor
-  if (monacoEditor && issues.length) {
-    highlightIssueLines(issues);
+  const findings = combineFindings(report);
+
+  // Mark exact lines in the editor itself: squiggly underline + gutter dot + line tint
+  applyMarkers(findings);
+
+  if (findings.length) {
+    const worst = findings[0].severity;
+    const level = (worst === 'critical' || worst === 'high') ? 'danger' : (worst === 'medium' ? 'warning' : 'muted');
+    setLiveStatus(`Up to date · ${findings.length} finding${findings.length === 1 ? '' : 's'}`, level);
+  } else {
+    setLiveStatus('Up to date · no issues found', 'success');
   }
 
-  // Show top issues
   const issuesEl = document.getElementById('ir-issue-list');
   if (issuesEl) {
-    issuesEl.innerHTML = issues.slice(0, 5).map(issue => `
-      <div class="issue-item">
-        <div class="issue-line-indicator ${issue.severity}"></div>
+    issuesEl.innerHTML = findings.length ? findings.map(f => `
+      <div class="issue-item" style="cursor:pointer;" onclick="jumpToLine(${f.line})" title="Click to jump to line ${f.line}">
+        <div class="issue-line-indicator ${f.severity}"></div>
         <div class="issue-content">
           <div class="issue-header">
-            ${createBadge(issue.severity)}
-            <span class="issue-message">${issue.message}</span>
-            <span class="issue-line">Line ${issue.line}</span>
+            ${createBadge(f.severity)}
+            <span class="issue-message">${escapeHtml(f.title)}</span>
+            <span class="issue-line">Line ${f.line}</span>
           </div>
-          ${issue.code_snippet ? `<div class="issue-snippet">${escapeHtml(issue.code_snippet)}</div>` : ''}
+          ${f.detail ? `<div class="issue-snippet">${escapeHtml(f.detail)}</div>` : ''}
         </div>
       </div>
-    `).join('');
+    `).join('') : `<div style="padding:16px 0;color:var(--text-muted);font-size:0.85rem;text-align:center;">✅ No issues detected.</div>`;
   }
 }
 
-function highlightIssueLines(issues) {
-  if (!monacoEditor || !monaco) return;
-
-  const decorations = issues.map(issue => ({
-    range: new monaco.Range(issue.line, 1, issue.line, 1),
-    options: {
-      isWholeLine: true,
-      className: `issue-line-${issue.severity}`,
-      glyphMarginClassName: `glyph-${issue.severity}`,
-      overviewRulerColor: getSeverityHex(issue.severity),
-      overviewRulerLane: monaco.editor.OverviewRulerLane.Right,
-      minimap: { color: getSeverityHex(issue.severity), position: 1 },
-      hoverMessage: { value: `**${issue.severity.toUpperCase()}**: ${issue.message}` }
-    }
-  }));
-
-  monacoEditor.deltaDecorations([], decorations);
+// Show a short status line next to the "Real-time" pulse dot
+function setLiveStatus(text, level) {
+  const el = document.getElementById('ir-status-text');
+  if (!el) return;
+  const colors = { muted: 'var(--text-muted)', success: 'var(--success)', warning: 'var(--warning)', danger: 'var(--danger)' };
+  el.textContent = text;
+  el.style.color = colors[level] || colors.muted;
 }
 
-function getSeverityHex(severity) {
-  const colors = { critical: '#dc2626', high: '#ea580c', medium: '#d97706', low: '#3b82f6', info: '#6b7280' };
-  return colors[severity] || '#6b7280';
+// Put real squiggly-underline error/warning markers directly in the code, at the exact line,
+// plus a gutter dot and a soft line tint so the problem line is visible without hovering.
+function applyMarkers(findings) {
+  if (!monacoEditor || !window.monaco) return;
+  const model = monacoEditor.getModel();
+  if (!model) return;
+
+  const sevToMonaco = {
+    critical: monaco.MarkerSeverity.Error,
+    high: monaco.MarkerSeverity.Error,
+    medium: monaco.MarkerSeverity.Warning,
+    low: monaco.MarkerSeverity.Info,
+    info: monaco.MarkerSeverity.Hint,
+  };
+
+  const lineCount = model.getLineCount();
+  const markers = findings.map(f => {
+    const line = Math.min(Math.max(f.line || 1, 1), lineCount);
+    return {
+      severity: sevToMonaco[f.severity] || monaco.MarkerSeverity.Info,
+      message: f.kind === 'vulnerability' ? `Security: ${f.title}` : f.title,
+      startLineNumber: line,
+      startColumn: 1,
+      endLineNumber: line,
+      endColumn: model.getLineMaxColumn(line),
+    };
+  });
+  monaco.editor.setModelMarkers(model, 'ai-review', markers);
+
+  const decorations = findings.map(f => {
+    const line = Math.min(Math.max(f.line || 1, 1), lineCount);
+    return {
+      range: new monaco.Range(line, 1, line, 1),
+      options: {
+        isWholeLine: true,
+        className: `issue-line-${f.severity}`,
+        glyphMarginClassName: `glyph-${f.severity}`,
+        glyphMarginHoverMessage: { value: f.title },
+      }
+    };
+  });
+  currentDecorationIds = monacoEditor.deltaDecorations(currentDecorationIds, decorations);
 }
+
+function clearMarkers() {
+  if (!monacoEditor || !window.monaco) return;
+  const model = monacoEditor.getModel();
+  if (model) monaco.editor.setModelMarkers(model, 'ai-review', []);
+  currentDecorationIds = monacoEditor.deltaDecorations(currentDecorationIds, []);
+}
+
+// Move the cursor to a finding's line when its card in the side panel is clicked
+function jumpToLine(line) {
+  if (!monacoEditor) return;
+  monacoEditor.revealLineInCenter(line);
+  monacoEditor.setPosition({ lineNumber: line, column: 1 });
+  monacoEditor.focus();
+}
+window.jumpToLine = jumpToLine;
 
 function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -302,8 +399,10 @@ function clearEditor() {
     const ta = document.getElementById('code-textarea');
     if (ta) ta.value = '';
   }
+  clearMarkers();
   const panel = document.getElementById('inline-results');
   if (panel) panel.style.display = 'none';
+  document.getElementById('run-output-panel')?.classList.remove('open');
 }
 
 function copyCode() {
@@ -316,6 +415,62 @@ function loadSampleCode() {
   const sample = getDefaultCode(lang);
   if (monacoEditor) monacoEditor.setValue(sample);
   Toast.info('Sample loaded', `${lang} sample code loaded`);
+}
+
+// Actually execute the code server-side and show real stdout/stderr — distinct
+// from the static "Analyze" pass above, which never runs the code at all.
+async function runCode() {
+  if (!App.requireAuth()) return;
+
+  const code = monacoEditor?.getValue() || '';
+  const language = document.getElementById('language-select')?.value || 'python';
+  const stdin = document.getElementById('run-stdin')?.value || '';
+
+  if (!code.trim()) {
+    Toast.warning('Empty Code', 'Please enter some code to run');
+    return;
+  }
+
+  const panel = document.getElementById('run-output-panel');
+  const body = document.getElementById('run-output-body');
+  const status = document.getElementById('run-status-text');
+  const runBtn = document.getElementById('run-btn');
+
+  panel.classList.add('open');
+  status.textContent = 'Running…';
+  status.style.color = 'var(--text-muted)';
+  body.innerHTML = `<div style="color:var(--text-muted);">Executing ${escapeHtml(language)} code…</div>`;
+  if (runBtn) { runBtn.disabled = true; runBtn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-width:2px;"></div> Running...'; }
+
+  try {
+    const res = await API.post('/api/execute', { code, language, stdin });
+    const r = res?.data;
+    if (!r) return;
+
+    const parts = [];
+    if (r.stdout) parts.push(`<div class="run-output-block run-output-stdout">${escapeHtml(r.stdout)}</div>`);
+    if (r.stderr) parts.push(`<div class="run-output-block run-output-stderr">${escapeHtml(r.stderr)}</div>`);
+    if (!r.stdout && !r.stderr) parts.push(`<div style="color:var(--text-muted);">(no output)</div>`);
+    body.innerHTML = parts.join('');
+
+    if (r.timed_out) {
+      status.textContent = `Timed out after ${Math.round(r.duration_ms / 1000)}s`;
+      status.style.color = 'var(--danger)';
+    } else if (r.exit_code === 0) {
+      status.textContent = `Finished · exit code 0 · ${r.duration_ms}ms`;
+      status.style.color = 'var(--success)';
+    } else {
+      const stage = r.stage === 'compile' ? 'Compile error' : 'Runtime error';
+      status.textContent = `${stage} · exit code ${r.exit_code} · ${r.duration_ms}ms`;
+      status.style.color = 'var(--danger)';
+    }
+  } catch (err) {
+    body.innerHTML = `<div class="run-output-block run-output-stderr">${escapeHtml(err.message)}</div>`;
+    status.textContent = 'Could not run';
+    status.style.color = 'var(--danger)';
+  } finally {
+    if (runBtn) { runBtn.disabled = false; runBtn.innerHTML = '▶ Run'; }
+  }
 }
 
 // Language change handler
@@ -338,6 +493,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const sampleBtn = document.getElementById('sample-btn');
   if (sampleBtn) sampleBtn.addEventListener('click', loadSampleCode);
+
+  const runBtn = document.getElementById('run-btn');
+  if (runBtn) runBtn.addEventListener('click', runCode);
+
+  const runCloseBtn = document.getElementById('run-output-close');
+  if (runCloseBtn) runCloseBtn.addEventListener('click', () => {
+    document.getElementById('run-output-panel').classList.remove('open');
+  });
+
+  const runStdinToggle = document.getElementById('run-stdin-toggle');
+  if (runStdinToggle) runStdinToggle.addEventListener('click', () => {
+    const row = document.getElementById('run-stdin-row');
+    row.style.display = row.style.display === 'none' ? 'flex' : 'none';
+  });
 
   // Init Monaco if editor div exists
   if (document.getElementById('monaco-editor') && typeof require !== 'undefined') {
